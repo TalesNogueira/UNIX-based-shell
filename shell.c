@@ -1,5 +1,8 @@
-// Tales Cabral Nogueira
-// Isabella Crosariol
+// Developed by:				//
+// Tales Cabral Nogueira	@TalesNogueira	//
+// Isabella Crosariol		@icrosari	//
+
+//////////////////////////////////////////////////
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,10 +13,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-//////////////////////////////////////////////////////////////////////////////////////////////// Executor de Comandos
-
 int exec(int start, int end, char **argv){
-
 	char **cmd;
 	
 	cmd = &argv[start];
@@ -36,10 +36,7 @@ int exec(int start, int end, char **argv){
 	return status;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////// Executa Comando em Background
-
-void execBACK(int start, int end, char **argv){
-
+void execBack(int start, int end, char **argv){
 	char **cmd;
 	
 	cmd = &argv[start];
@@ -58,10 +55,7 @@ void execBACK(int start, int end, char **argv){
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////// Executa Comando em Pipe
-
-void execPIPE(char **argv, int pipeCounter, int *operArray){
-
+void execPipe(char **argv, int pipeCounter, int *argArray, int *checker){
 	int fd[pipeCounter][2];
 	
 	int comandos = pipeCounter + 1;	
@@ -69,11 +63,9 @@ void execPIPE(char **argv, int pipeCounter, int *operArray){
 	pid_t child;
 	
 	int status;
-	
 	int i;
 	
 	for(i = 0; i < comandos; i++){
-	
 		if(i < pipeCounter){
 			if(pipe(fd[i]) < 0){
 				perror("pipe()");
@@ -87,7 +79,6 @@ void execPIPE(char **argv, int pipeCounter, int *operArray){
 			perror("fork()");
 			exit(-1);
 		}else if(child == 0){
-
 			if(i < comandos-1){
 				dup2(fd[i][1], STDOUT_FILENO);
 				close(fd[i][0]);
@@ -101,35 +92,33 @@ void execPIPE(char **argv, int pipeCounter, int *operArray){
 			}
 
 			char **cmd;
-			cmd = &argv[operArray[i]];
+			cmd = &argv[argArray[i]];
 
 			if(execvp(cmd[0], cmd) != 0){
 				perror("execvp()");
 				exit(-1);
 			}
 		}else{
-		
 			if(i > 0){
-
 				close(fd[i-1][0]);
 				close(fd[i-1][1]);
 			}
 			waitpid(-1, &status, 0);
 		}
 	}
+	
+	if(status != 0) *checker = 1;
+	else *checker = 0;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////// Podador de Pipeline
-
-int pipeLINE(int start, int firstPipe, int end, char **argv){
-	
+int pipeLine(int start, int firstPipe, int end, char **argv, int *checker){
 	int pipeCounter = 1;
-	int operArray[end];
+	int argArray[end];
 	
 	argv[firstPipe] = NULL;
 	
-	operArray[0] = start;
-	operArray[1] = firstPipe + 1;
+	argArray[0] = start;
+	argArray[1] = firstPipe + 1;
 	
 	int i;
 	
@@ -137,24 +126,21 @@ int pipeLINE(int start, int firstPipe, int end, char **argv){
 		if(strcmp(argv[i], "|") == 0){
 			argv[i] = NULL;
 			pipeCounter++;
-			operArray[pipeCounter] = i + 1;
+			argArray[pipeCounter] = i + 1;
 		}else if(strcmp(argv[i], ";") == 0){
 			argv[i] = NULL;
 			break;
 		}else if( strcmp(argv[i], "||") == 0 || strcmp(argv[i], "&&") == 0 || strcmp(argv[i], "&") == 0) break;
 	}
 	
-	execPIPE(argv, pipeCounter, operArray);
+	execPipe(argv, pipeCounter, argArray, checker);
 
 	return i;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////// Shell Main
-
 int main(int argc, char **argv) {
-
 	int i;
-	int status = 0;
+	int checker = 0;
 	int argument = 1;
 
 	if (argc == 1) {
@@ -162,45 +148,45 @@ int main(int argc, char **argv) {
 		return 0;
 	}else{
 		for(i = 1; i < argc; i++){
-            if(strcmp(argv[i], "&&") == 0){
-				if(status == 0){
-					status = exec(argument, i, argv);
+            		if(strcmp(argv[i], "&&") == 0){
+				if(checker == 0){
+					checker = exec(argument, i, argv);
 				}
 				argument = i + 1;
 			
 			}else if(strcmp(argv[i], "||") == 0){
-				if(status == 0){
-					status = exec(argument, i, argv);
+				if(checker == 0){
+					checker = exec(argument, i, argv);
 				}
 				argument = i + 1;
 
-				if(status != 0) status = 0;
-				else status = 1;
+				if(checker != 0) checker = 0;
+				else checker = 1;
 			
 			}else if(strcmp(argv[i], ";") == 0){
-				if(status == 0){
-					status = exec(argument, i, argv);
+				if(checker == 0){
+					checker = exec(argument, i, argv);
 				}
 				argument = i + 1;
-				status = 0;
+				checker = 0;
 			
 			}else if(strcmp(argv[i], "&") == 0){
-				if(status == 0){
-					execBACK(argument, i, argv);
+				if(checker == 0){
+					execBack(argument, i, argv);
 				}
 				argument = i + 1;
 				
 			}else if(strcmp(argv[i], "|") == 0){
-				if(status == 0){
-					i = pipeLINE(argument, i, argc, argv);
+				if(checker == 0){
+					i = pipeLine(argument, i, argc, argv, &checker);
 				}
 				argument = i + 1;
 			}
 		}
 	}
 	
-	if(status == 0 && i != argc + 1){
-		exec(argument, i, argv);
+	if(checker == 0 && i != argc + 1){
+		checker = exec(argument, i, argv);
 	}
 	
 	printf("---END---\n");
